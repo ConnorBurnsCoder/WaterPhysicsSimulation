@@ -2,7 +2,7 @@
 The project implements physics based rendering of fluid dynamics, creates and modifies 3d object, applies translucent shaders to the
 mesh, and uses multiple integration methods.
 
-View the animation by downloading the files and opening waterphysics.html in you webbrowser(definitely works on chrome, but may not work for all browsers)
+View the animation by downloading the files and opening waterphysics.html in your webbrowser (works on chrome, but may not work for all browsers)
 
 Important Buttons:
 
