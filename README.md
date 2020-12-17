@@ -1,4 +1,4 @@
-# WaterPhysicsAnimation
+# WaterPhysicsSimulation
 The project implements physics based rendering of fluid dynamics, creates and modifies 3d object, applies translucent shaders to the
 mesh, and uses multiple integration methods.
 
