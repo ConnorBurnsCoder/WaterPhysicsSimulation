@@ -24,9 +24,15 @@ whole mesh. When the boxes collide with the mesh a force is applied.
 
 
 Citations / Inspiration:
+
 Background images: Zachary Difura
+
 Cube Model Code: CS 112 Project 1
+
 Shader Code: CS 114 Project 1
+
 Mesh Code: CS 114 Project 3
+
 Translucency: http://learnwebgl.brown37.net/11_advanced_rendering/alpha_blending.html
+
 Runge-Kutta 4: https://www.intmath.com/differential-equations/12-runge-kutta-rk4-des.php
