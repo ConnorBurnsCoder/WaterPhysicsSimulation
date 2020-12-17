@@ -9,7 +9,7 @@ Important Buttons:
 1. Background: Allows the user to change three different types of tiles. This feature
 is locked when viewing the mesh from the side.
 
-2. Integration Method: chooses which integration method to use (Euler's method (k=1), Leapfrog (k=2), or Runeg-Kutta 4 (k=4)). The k value is the order of the method. The error of the method is delta_t^k where delta_t is the timestep between frames.
+2. Integration Method: chooses which integration method to use (Euler's method (k=1), Leapfrog (k=2), or Runeg-Kutta 4 (k=4)). The k value is the order of the method. The error of the method is delta_t^k where delta_t is the timestep between frames. ***In Progress***
 
 3. View: Choose a view from either the top or side of the mesh.
 
