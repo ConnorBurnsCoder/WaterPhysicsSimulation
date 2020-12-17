@@ -1,0 +1,436 @@
+<!doctype html>
+<html>
+
+<head>
+<title>Water Physics Simulation</title>
+<meta charset="utf-8">
+<link href="css/waterphysics.css" rel="stylesheet">
+<!-- my added spectrum -->
+<link href="css/spectrum.css" rel="stylesheet">
+
+<!-- Useful 3rd party libraries -->
+<script type="text/javascript" src="js/jquery-1.12.2.min.js"></script>
+<script type="text/javascript" src="js/glMatrix-0.9.5.js"></script>
+
+<!-- Shader initialization utils -->
+<script type="text/javascript" src="js/shader-utils.js"></script>
+
+<!-- WebGL debugging utils -->
+<script type="text/javascript" src="js/webgl-debug.js"></script>
+<script type="text/javascript" src="js/debug-utils.js"></script>
+
+<!-- my added others -->
+<script type="text/javascript" src="js/spectrum.js"></script>
+<script type="text/javascript" src="models.js"></script>
+
+<!-- Simulation-related functions -->
+<script type="text/javascript" src="waterphysics_sim.js"></script>
+
+<!-- WebGL functions -->
+<script type="text/javascript" src="waterphysics_webgl.js"></script>
+
+<!-- Other javascript functions -->
+<script type="text/javascript" src="waterphysics.js"></script>
+
+<!-- Vertex shader -->
+<script id="shader-vs" type="x-shader/x-vertex">
+    uniform mat4 uMVMatrix;             // Model-view matrix
+    uniform mat4 uPMatrix;              // Projection matrix
+    uniform mat4 uNMatrix;              // Normal matrix
+
+    attribute vec3 aVertexPosition;     // Vertex position in object space
+    attribute vec3 aVertexNormal;       // Vertex normal in object space
+
+    varying vec3 vPosition;             // Vertex position (camera space)
+    varying vec3 vNormal;               // Vertex normal (camera space)
+
+    void main(void) {
+        vec4 camSpacePosition = uMVMatrix * vec4(aVertexPosition, 1.0);
+        vPosition = vec3(camSpacePosition);
+
+        gl_Position = uPMatrix * camSpacePosition;        
+
+        vec4 camSpaceNormal = uNMatrix * vec4(aVertexNormal, 0.0);
+        vNormal = vec3(camSpaceNormal);
+    }
+</script>
+
+<!-- Fragment shader (Blinn-Phong) -->
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+                                        //none of these do anythin in this shader but these about the harcoded values they do
+    uniform float uLightPower;          // 4
+    uniform vec3 uDiffuseColor;         // vec3(0.2392, 0.5216, 0.7765);
+    uniform vec3 uSpecularColor;        // vec3(1., 1., 1.);
+    uniform float uAmbient;             // .2
+                                        // 10 = uExponent
+
+    uniform vec3 uLightPos;             // Light position in camera space
+    varying vec3 vPosition;             // Fragment position (camera space)
+    varying vec3 vNormal;               // Fragment normal (camera space)
+
+    void main(void) {
+        vec3 vLight = uLightPos - vPosition;
+        float dist = length(vLight);
+        vLight = vLight/dist;
+
+        vec3 vView = normalize(-vPosition);
+        vec3 vHalf = normalize(vView + vLight);
+        vec3 vNormal_ = normalize(vNormal);
+        if ( dot(vNormal_, vView) < 0.0 ) vNormal_ = -vNormal_;
+
+        vec3 diffClr = vec3(0.2392, 0.5216, 0.7765);
+        float ambient = 0.2;
+
+        float diff = max(dot(vNormal_, vLight), 0.0);
+        float spec = pow(max(dot(vNormal_, vHalf), 0.0), 10.0);
+        vec3 I = 5.0*(diffClr*diff + spec)/(5.0 + 0.2*dist*dist) + diffClr*ambient;
+
+        gl_FragColor = vec4(I, 1.0);
+    }
+</script>
+
+<!-- my blinn-phong shader, make it work with user input-->
+<!-- ambient, difcolor and others are not hardcoded-->
+<script id="shader-fs-bp" type="x-shader/x-fragment">
+    precision mediump float;
+
+    uniform vec3 uLightPos;             // Light position in camera space
+    uniform float uLightPower;          // Light power
+    uniform vec3 uDiffuseColor;         // Diffuse color
+    uniform vec3 uSpecularColor;        //specular color
+    uniform float uExponent;            // Blinn-Phong exponent
+    uniform float uAmbient;             // Ambient
+
+    varying vec3 vPosition;             // Fragment position (camera space)
+    varying vec3 vNormal;               // Fragment normal (camera space)
+
+    void main(void) {
+        // Dummy variable to ensure the use of all vertex attributes.
+        vec4 zero = vec4(vPosition + vNormal - vPosition - vNormal, 0.0);
+
+        vec3 light_at_point = vec3(0.,0.,0.);
+        vec3 o_n = -1.0*normalize(vPosition);       // vView
+        vec3 n_n = normalize(vNormal);              // vNormal_
+        vec3 i_n = normalize(uLightPos-vPosition);  // vLight
+        vec3 h_n = normalize(i_n+o_n);              // vHalf
+        float temp = dot(n_n,i_n);                  // dot(vNormal_, vLight)
+        float n_dot_h = dot(n_n,h_n);               // dot(vNormal_, vHalf)
+        float I = uLightPower/(length(i_n)*length(i_n)/5.+5.);
+        if(temp>0.){
+            light_at_point = uDiffuseColor*(I * temp + uAmbient)+uSpecularColor*I*pow(n_dot_h,uExponent);
+        }else{
+            light_at_point = uDiffuseColor*uAmbient;
+        }
+        gl_FragColor = zero + vec4(light_at_point, 1.0);
+    }
+</script>
+
+<!-- Fragment shader (Translucent) todo change from temp same exact blinn-phong to translucent-->
+<!-- ambient, difcolor and others are hardcoded-->
+<script id="shader-fs-t" type="x-shader/x-fragment">
+    precision mediump float;
+
+    uniform vec3 uLightPos;             // Light position in camera space
+    uniform float uLightPower;          // Light power
+    uniform vec3 uDiffuseColor;         // Diffuse color
+    uniform vec3 uSpecularColor;        //specular color
+    uniform float uExponent;            // Blinn-Phong exponent
+    uniform float uAmbient;             // Ambient
+    uniform float uAlpha;               // alpha of color for blending todo
+
+    varying vec3 vPosition;             // Fragment position (camera space)
+    varying vec3 vNormal;               // Fragment normal (camera space)
+
+    void main(void) {
+        // Dummy variable to ensure the use of all vertex attributes.
+        vec4 zero = vec4(vPosition + vNormal - vPosition - vNormal, 0.0);
+
+        vec3 light_at_point = vec3(0.,0.,0.);
+        vec3 o_n = -1.0*normalize(vPosition);       // vView
+        vec3 n_n = normalize(vNormal);              // vNormal_
+        vec3 i_n = normalize(uLightPos-vPosition);  // vLight
+        vec3 h_n = normalize(i_n+o_n);              // vHalf
+        float temp = dot(n_n,i_n);                  // dot(vNormal_, vLight)
+        float n_dot_h = dot(n_n,h_n);               // dot(vNormal_, vHalf)
+        float I = uLightPower/(length(i_n)*length(i_n)/5.+5.);
+        if(temp>0.){
+            light_at_point = uDiffuseColor*(I * temp + uAmbient)+uSpecularColor*I*pow(n_dot_h,uExponent);
+        }else{
+            light_at_point = uDiffuseColor*uAmbient;
+        }
+        gl_FragColor = zero + vec4(light_at_point, uAlpha);
+    }
+</script>
+</head>
+
+
+<!-- HTML contents -->
+<body>
+    <h1>Water Physics Simulation - Connor Burns</h1>
+
+    <div style="margin-top:10px; float:left">
+        <!--Backgound image here -->
+        <canvas id="canvas0" style="background: url('floor_tile1.jpg')" width="600" height="800"></canvas>
+    </div>
+    <div style="margin-left:10px; float:left">
+        <div class="panel">
+            <p>Rendering Control</p>
+            <table>
+                <tr>
+                    <td width="200px">Resolution</td>
+                    <td width="230px">
+                        <select onchange="changeResolution(this);">
+                            <option value="0">480x640</option>
+                            <option value="1" selected="selected">600x800</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td width="200px">Background</td>
+                    <td width="230px">
+                        <select id="change" onchange="changeBackground(this.value);">
+                            <option value="0" selected="selected">Tile 1</option>
+                            <option value="1" >Tile 2</option>
+                            <option value="2">Tile 3</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Drawing Mode</td>
+                    <td>
+                        <select onchange="changeMode(this.value);">
+                            <option value="0" selected="selected">Normal</option>
+                            <option value="1">Wire-frame</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td><input type="checkbox" onchange="changeRotatingState(this.checked);">Rotating object</td>
+                    <td>
+                        <input id="sliderBar" type="range" min="1" max="36" value="6" onchange="updateSlider(this.value);" disabled>
+                        (<span id="sliderAmount">60</span>&deg;/s)
+                    </td>
+                </tr>        
+                <tr>
+                    <td><input type="checkbox" onchange="changeAnimatedLightState(this.checked);">Rotating light</td>
+                    <td>
+                        <input id="sliderBarLight" type="range" min="1" max="36" value="6" onchange="updateSliderLight(this.value);" disabled>
+                        (<span id="sliderAmountLight">60</span>&deg;/s)
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div style="clear:left"></div>
+        <div class="panel">
+            <p>Animation and Physics Control</p>
+            <table>
+                <tr>
+                    <td width="200px">Mesh Resolution</td>
+                    <td width="230px">
+                        <select onchange="changeMeshResolution(this.value);">
+                            <option value="1">15x15</option>
+                            <option value="2" selected="selected">25x25</option>
+                            <option value="3">35x35</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <input type="checkbox" onchange="changeAnimatedState(this.checked);" checked>Animated
+                    </td>
+                    <td>
+                        <button type="botton" onclick="resetMesh();">Restart</button>
+                        &nbsp;
+                        <button type="botton" onclick="window.location.reload();">Reset parameters</button>
+                    </td>                
+                </tr>
+                <tr>
+                    <td>Integration Method</td>
+                    <td>
+                        <select onchange="changeIntegationMethod(this.value);">
+                            <option value="0"selected="selected">Euler's</option>
+                            <option value="1">Leapfrog</option>
+                            <option value="2">Runge-Kutta 4</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>View</td>
+                    <td>
+                        <select onchange="changeViewType(this.value);">
+                            <option value="1"selected="selected">Top</option>
+                            <option value="0">Side</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                	<td>Apply Poke</td>
+                    <td>
+                        <button type="botton" onclick="applyPoke();">Poke</button>
+                    </td>
+                </tr>  
+           		<tr>
+                    <td>Poke Force</td>
+                    <td>
+                        <input type="range" min="1" max="50" value="10" onchange="changePokeForce(this.value);">
+                        (<span id="sliderPokeForce">1.0</span>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Poke Area</td>
+                    <td>
+                        <input type="range" min="1" max="6" value="1" onchange="changePokeArea(this.value);">
+                        (<span id="sliderPokeArea">1</span>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Poke Time(in frames)</td>
+                    <td>
+                        <input type="range" min="1" max="10" value="1" onchange="changePokeTime(this.value);">
+                        (<span id="sliderPokeTime">1</span>)
+                    </td>
+                </tr> 
+                <tr>
+                	<td>Poke Location</td>
+                    <td>
+                        <select onchange="changePokeLocat(this.value);">
+                            <option value="0" selected="selected">Middle</option>
+                            <option value="1">Upper Left</option>
+                            <option value="2">Upper Right</option>
+                            <option value="3">Lower Left</option>
+                            <option value="4">Lower Right</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Particle Mass</td>
+                    <td>
+                        <input type="range" min="1" max="50" value="10" onchange="updateSliderMass(this.value);">
+                        (<span id="sliderAmountMass">1.0</span>)
+                    </td>
+                </tr>             
+                <tr>
+                    <td>Structural Stiffness</td>
+                    <td>
+                        <input type="range" min="1" max="50" value="25" onchange="updateSliderK0(this.value);">
+                        (<span id="sliderAmountK0">25</span>&times;10<sup>3</sup>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Shear Stiffness</td>
+                    <td>
+                        <input type="range" min="1" max="50" value="25" onchange="updateSliderK1(this.value);">
+                        (<span id="sliderAmountK1">25</span>&times;10<sup>3</sup>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Bend Stiffness</td>
+                    <td>
+                        <input type="range" min="1" max="50" value="25" onchange="updateSliderK2(this.value);">
+                        (<span id="sliderAmountK2">25</span>&times;10<sup>3</sup>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Damping</td>
+                    <td>
+                        <input type="range" min="0" max="10" value="5" onchange="updateSliderCd(this.value);">
+                        (<span id="sliderAmountCd">0.5</span>)
+                    </td>
+                </tr>          
+            </table>
+        </div>
+    </div>
+    <div style="margin-left:10px; float:left">
+        <div class="panel">
+            <p>Shading and Light Parameters</p>
+            <table>
+                <tr>
+                    <td>
+                        <input type="checkbox" onchange="changeTranslucent(this.checked);" unchecked>Translucent
+                    </td>
+                    <td>
+                        <input type="range" min="0" max="10" value="9" onchange="updateSlider_TranspAlpha(this.value);">
+                        (<span id="sliderAmount_TranspAlpha">0.9</span>)
+                    </td>
+            
+                </tr>
+                <tr>
+                    <td>Light power</td>
+                    <td>
+                        <!-- todo-->
+                        <input id="sliderBar_LightPower" type="range" min="1" max="20" value="10" onchange="updateSlider_LightPower(this.value);">
+                        (<span id="sliderAmount_LightPower">5</span>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Diffuse Color</td>
+                    <td>
+                        <input type="text" id="colorPickerDiff"> (<span id="colorTextDiff">#1f75fe</span>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Specular Color</td>
+                    <td>
+                        <input type="text" id="colorPickerSpec"> (<span id="colorTextSpec">#ffffff</span>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Ambient</td>
+                    <td>
+                        <input type="range" min="0" max="50" value="10" onchange="updateSlider_Ambient(this.value);">
+                        (<span id="sliderAmount_Ambient">0.1</span>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Exponent</td>
+                    <td>
+                        <input type="range" min="1" max="40" value="10" onchange="updateSlider_BlinnPhongExp(this.value);">
+                        (<span id="sliderAmount_BlinnPhongExp">50</span>)
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div style="clear:left"></div>
+        <div class="panel">
+            <p>Collision Control</p>
+            <table>
+                <tr>
+                    <td>
+                        <button type="botton" onclick="dropBox();">Drop Box</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Box Particle Mass</td>
+                    <td>
+                        <input type="range" min="1" max="50" value="10" onchange="updateSlider_BoxMass(this.value);">
+                        (<span id="sliderAmount_BoxMass">1.0</span>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <input type="checkbox" onchange="toggleRain(this.checked);" unchecked>Toggle Rain
+                    </td>
+                </tr>
+                <tr>
+                    <td>Raininess</td>
+                    <td>
+                        <input type="range" min="1" max="10" value="5" onchange="updateSlider_Raininess(this.value);">
+                        (<span id="sliderAmount_Raininess">5</span>)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Droplet Mass</td>
+                    <td>
+                        <input type="range" min="1" max="50" value="10" onchange="updateSliderDropletMass(this.value);">
+                        (<span id="sliderAmountDropletMass">1.0</span>)
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+    </div>
+    
+</body>
+
+</html>
