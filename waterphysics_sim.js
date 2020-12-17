@@ -28,8 +28,8 @@ var poke_locat_y;
 
 //my integration method vars
 // 0 == Euler's, 1 == Leapfrog, 2 == RK4
-var method_type;
-var new_sim;
+var method_type = 0;
+var new_sim = true;
 
 //my view vars
 var view_type;
