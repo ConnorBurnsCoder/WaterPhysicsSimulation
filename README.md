@@ -24,7 +24,7 @@ causes forces to be applied.
 7. Toggle Rain: Activating this feature will drop small boxes randomly over the
 whole mesh. When the boxes collide with the mesh a force is applied.
 
-
+![alt text](https://github.com/ConnorBurnsCoder/WaterPhysicsSimulation/blob/main/WaterPhysicsPic.jpg?raw=true)
 
 Citations / Inspiration:
 
